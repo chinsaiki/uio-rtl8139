@@ -69,7 +69,7 @@ int parse_sysfs_int(char *filename, uint64_t *value)
 }
 
 int find_sysfs_device(uint64_t vendor_id, uint64_t device_id,
-		char *directory, size_t directory_len)
+		char *directory, size_t directory_len, int verbose)
 {
 	int r;
 	DIR *dir;
@@ -132,6 +132,10 @@ int find_sysfs_device(uint64_t vendor_id, uint64_t device_id,
 			strncpy(directory, path, directory_len);
 			closedir(dir);
 			return 1;
+		}else if (verbose){
+			fprintf(stdout, "PCI device (0x%x:0x%x) out of target\n",
+					vid, did
+					);
 		}
 	}
 

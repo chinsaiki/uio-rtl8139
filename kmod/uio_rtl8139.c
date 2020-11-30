@@ -27,12 +27,12 @@
 #define CHARDEV_PATH "/dev/" CHARDEV_NAME
 
 struct uio_rtl8139_dev {
-	struct uio_info info;
+	struct uio_info info;		//uio 通用結構
 
-	struct pci_dev *dev;
-	struct dma_buffer rx_ring;
+	struct pci_dev *dev;		//pci設備描述結構
+	struct dma_buffer rx_ring;	
 
-	struct cdev cdev;
+	struct cdev cdev;			//
 	struct class *cls;
 	dev_t devno;
 };
@@ -112,7 +112,7 @@ static int uio_rtl8139_register_iomem(struct uio_rtl8139_dev *uio_dev,
 	if (start == 0 || end == 0)
 		return -EINVAL;
 
-	internal_addr = ioremap(start, len);
+	internal_addr = ioremap(start, len);	////用mmap映射一个设备意味着使用户空间的一段地址关联到设备内存上，这使得只要程序在分配的地址范围内进行读取或写入，实际上就是对设备的访问。用iounmap取消映射。
 	if (internal_addr == NULL) {
 		DBG("ioremap(%lx, %lx) failed\n", start, len);
 		return -1;
@@ -146,6 +146,7 @@ static int uio_rtl8139_register_ioport(struct uio_rtl8139_dev *uio_dev,
 	return 0;
 }
 
+/* 重新映射I/O和內存 */
 static int uio_rtl8139_register_io_resources(struct pci_dev *dev,
 		struct uio_rtl8139_dev *uio_dev)
 {
@@ -220,7 +221,12 @@ int dma_mmap(struct file *filep, struct vm_area_struct *vma)
 	if (len < RX_BUF_TOT_LEN)
 		return -EINVAL;
 
-	vma->vm_flags |= VM_RESERVED;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 7, 0)
+	vma->vm_flags |= VM_RESERVED;	// <3.7.0
+#else
+	vma->vm_flags |= (VM_DONTEXPAND | VM_DONTDUMP);
+#endif
+
 	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 
 	pfn = virt_to_phys(uio_dev->rx_ring.virtual_addr + offset) >> PAGE_SHIFT;
@@ -260,7 +266,7 @@ long dma_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	uio_dev = (struct uio_rtl8139_dev *) filp->private_data;
 
 	switch (cmd) {
-		case IOCTL_DMA_BUFFER:
+		case IOCTL_DMA_BUFFER:	//返回DMA参数
 			dma.dma_addr = uio_dev->rx_ring.dma_addr;
 			dma.virtual_addr = uio_dev->rx_ring.virtual_addr;
 			dma.size = uio_dev->rx_ring.size;
@@ -299,6 +305,7 @@ static int mmap_chardev_setup(struct uio_rtl8139_dev *uio_dev)
 {
 	int r;
 	dev_t dev;
+	struct device *d;
 
 	dev = 0;
 	r = alloc_chrdev_region(&dev, 0, 1, CHARDEV_NAME);
@@ -319,12 +326,18 @@ static int mmap_chardev_setup(struct uio_rtl8139_dev *uio_dev)
 	}
 
 	/* make udev/mdev creating an entry in the /dev directory */
-	uio_dev->cls = class_create(THIS_MODULE, CHARDEV_PATH);
+	uio_dev->cls = class_create(THIS_MODULE, CHARDEV_NAME);
 	if (uio_dev->cls == NULL) {
 		return -1;
 	}
 
-	device_create(uio_dev->cls, NULL, dev, NULL, CHARDEV_PATH);
+	d = device_create(uio_dev->cls, NULL, dev, NULL, CHARDEV_NAME);
+
+	if (IS_ERR(d)){
+		ERR("device_create fail!\n");
+		return -1;
+	}
+	DBG("chardev setup OK:%s\n", CHARDEV_NAME);
 
 	return 0;
 }
@@ -345,19 +358,19 @@ static int uio_rtl8139_pci_probe(struct pci_dev *dev,
 		goto err_free;
 	}
 
-	r = pci_set_dma_mask(dev, DMA_BIT_MASK(32));
+	r = pci_set_dma_mask(dev, DMA_BIT_MASK(DMAMASK));	//FPGA可访问的总线地址位宽
 	if (r != 0) {
 		ERR("Can't set dma mask\n");
 		goto err_free;
 	}
 
-	r = pci_request_regions(dev, "uio_rtl8139");
+	r = pci_request_regions(dev, "uio_rtl8139");		//Reserved PCI I/O and memory resources Synopsis，设置FPGA resource name
 	if (r != 0) {
 		ERR("Can't request region\n");
 		goto err_disable;
 	}
 
-	pci_set_master(dev);
+	pci_set_master(dev);	//设定设备工作在总线主设备模式
 
 	r = uio_rtl8139_register_io_resources(dev, uio_dev);
 	if (r != 0) {
@@ -365,7 +378,7 @@ static int uio_rtl8139_pci_probe(struct pci_dev *dev,
 		goto err_regions;
 	}
 
-  r = mmap_chardev_setup(uio_dev);
+  	r = mmap_chardev_setup(uio_dev);	//cdev 是用于在用户态获取DMA参数
 	if (r != 0) {
 		ERR("Can't create chardev\n");
 		goto err_io_resources;
@@ -385,7 +398,10 @@ static int uio_rtl8139_pci_probe(struct pci_dev *dev,
 
 	uio_dev->dev = dev;
 	uio_dev->rx_ring.virtual_addr = pci_alloc_consistent(dev, RX_BUF_TOT_LEN,
-			&uio_dev->rx_ring.dma_addr);
+			&uio_dev->rx_ring.dma_addr);	//分配DMA空间，返回kernel的虚拟地址，参数3得到fpga侧用来读写host内存的物理地址
+
+	DBG("dma alloc: virtual_addr=0x%p  dma_addr=0x%lx  size=%x\n", uio_dev->rx_ring.virtual_addr, (u64)uio_dev->rx_ring.dma_addr, RX_BUF_TOT_LEN);
+
 	memset(uio_dev->rx_ring.virtual_addr, 0, RX_BUF_TOT_LEN);
 
 	uio_dev->rx_ring.size = RX_BUF_TOT_LEN;
@@ -427,7 +443,9 @@ static void uio_rtl8139_pci_remove(struct pci_dev *dev)
 }
 
 static struct pci_device_id ids[] = {
-	{ PCI_DEVICE(PCI_VENDOR_ID_REALTEK, PCI_DEVICE_ID_REALTEK_8139) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_ALTERA, PCI_DEVICE_ID_ALTERA_INTERNAL) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_ALTERA, PCI_DEVICE_ID_ALTERA_EXTERNAL) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_XILINX, PCI_DEVICE_ID_XILINX_SerialDemo) },
 	{ 0, }
 };
 

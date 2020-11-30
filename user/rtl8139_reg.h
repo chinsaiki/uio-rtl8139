@@ -147,6 +147,17 @@ static inline void iowrite32(volatile void *addr, uint32_t val)
 	*(volatile uint32_t *) addr = val;
 }
 
+
+static inline int iowrite32chk(volatile void* addr, uint32_t val)
+{
+	iowrite32(addr, val);
+	uint32_t rd = ioread32(addr);
+	if (rd != val)
+		return -1;
+	return 0;
+}
+
+
 #define register_write8(nic, reg, value)	\
 	iowrite8(nic->base_addr + reg, value)
 

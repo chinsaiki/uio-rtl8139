@@ -31,14 +31,15 @@ int dma_buffer_open(struct rtl8139_dev *nic)
 	}
 
 	nic->rx_ring.mmap_addr = mmap(NULL, RX_BUF_TOT_LEN, PROT_READ | PROT_WRITE,
-			MAP_SHARED, nic->rx_ring_fd, 0);
+			MAP_SHARED, nic->rx_ring_fd, 0);	//call dma_mmap
+
 	if (nic->rx_ring.mmap_addr == (char *) MAP_FAILED) {
 		close(nic->rx_ring_fd);
 		fprintf(stderr, "mmap failed: %s\n", strerror(errno));
 		return -1;
 	}
 
-	fprintf(stderr, "mmap_addr: %p virtual_addr: %p dma_addr: %p size: %ld\n",
+	fprintf(stderr, "dma:mmap_addr: %p OK (kernel virtual_addr: %p  fpga dma_addr: %p size: %ld)\n",
 			nic->rx_ring.mmap_addr, nic->rx_ring.virtual_addr,
 			nic->rx_ring.dma_addr, nic->rx_ring.size);
 
