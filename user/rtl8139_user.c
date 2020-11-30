@@ -672,96 +672,39 @@ int main(int argc, char *argv[])
 		goto out_mlock;
 	}
 	
-    int cmd_bar = strtol(argv[2], NULL, 10);
-    int cmd_offset = strtol(argv[3], NULL, 16);
-    int cmd_value;
 
     if (argv[1][0] == 'w' || argv[1][0] == 'W'){
-        cmd_value = strtol(argv[4], NULL, 16);
+		int cmd_bar = strtol(argv[2], NULL, 10);
+		int cmd_offset = strtol(argv[3], NULL, 16);
+		int cmd_value = strtol(argv[4], NULL, 16);
         printf("write bar=%d  offset=0x%08lx  value=0x%08lx\n", cmd_bar, cmd_offset, cmd_value);
 		iowrite32(nic.bar[cmd_bar].mmapaddr+cmd_offset, cmd_value);
     }else if (argv[1][0] == 'r' || argv[1][0] == 'R'){
+		int cmd_bar = strtol(argv[2], NULL, 10);
+		int cmd_offset = strtol(argv[3], NULL, 16);
+		int cmd_value;
         printf("read bar=%d  offset=0x%08lx\n", cmd_bar, cmd_offset); 
         cmd_value = ioread32(nic.bar[cmd_bar].mmapaddr+cmd_offset);
         printf("read value=0x%08lx\n", cmd_value); 
-    }else if(argv[1][0] == 'd' || argv[1][0] == 'D'){	//DMA
-		r = dma_buffer_open(&nic);			//参考： https://stackoverflow.com/a/7021125
-		if (r < 0) {
-			fprintf(stderr, "dma_buffer_open failed\n");
-			goto out_mlock;
+    }else if(argv[1][0] == 'd' || argv[1][0] == 'D'){	//dump
+		int cmd_bar = strtol(argv[2], NULL, 10);
+		int cmd_offset = strtol(argv[3], NULL, 16);
+		int cmd_scope = strtol(argv[4], NULL, 16);
+		int cmd_value;
+		int i;
+        printf("read bar=%d  begin offset=0x%08lx num=%d:\n", cmd_bar, cmd_offset, cmd_scope); 
+		if (cmd_offset&3!=0){
+			fprintf(stderr, "offset=0x%08lx illegal: not DWORD align!\n", cmd_offset);
+			goto out_mlock;	//deprecated
 		}
-
-		nic.dma.nb = 128;
-		nic.dma.num_dwords = 32;
-
-		r = alt_dma_desc_init(&nic);
-		if (r != 0) {
-			fprintf(stderr, "alt_dma_desc_init failed\n");
-			goto out_mlock;
+		for (i=0; i<cmd_scope; ++i){
+			cmd_value = ioread32(nic.bar[cmd_bar].mmapaddr+cmd_offset);
+        	printf("A=0x%08lx  V=0x%08lx\n", cmd_bar, cmd_offset, cmd_value); 
+			cmd_offset += 4;
 		}
-
-		//read to FPGA
-		r = alt_dma_mem_init(&nic, 1, "dump0.txt", "dump1.txt");
-		if (r != 0) {
-			fprintf(stderr, "alt_dma_desc_init failed\n");
-			goto out_mlock;
-		}
-
-		r = alt_dma_write_desc(&nic, 1);
-		if (r != 0) {
-			fprintf(stderr, "alt_dma_write_desc failed\n");
-			goto out_mlock;
-		}
-
-		//write from FPGA
-		r = alt_dma_mem_init(&nic, 2, "dump2.txt", "dump3.txt");
-		if (r != 0) {
-			fprintf(stderr, "alt_dma_desc_init failed\n");
-			goto out_mlock;
-		}
-
-		r = alt_dma_write_desc(&nic, 0);
-		if (r != 0) {
-			fprintf(stderr, "alt_dma_write_desc failed\n");
-			goto out_mlock;
-		}
-
-		//
-		r = alt_dma_mem_init(&nic, 3, "dump4.txt", "dump5.txt");
-		if (r != 0) {
-			fprintf(stderr, "alt_dma_desc_init failed\n");
-			goto out_mlock;
-		}
-		dump_mem((char*)nic.dma.lite_table_rd_cpu_virt_addr, sizeof(struct lite_dma_desc_table), "rd_table.txt");
-		dump_mem((char*)nic.dma.lite_table_wr_cpu_virt_addr, sizeof(struct lite_dma_desc_table), "wr_table.txt");
-
-		//nic.fd = open(nic.uio_device_name, O_RDWR);
-		//handle_interrupt(nic.fd, &nic);
-		//close(nic.fd);
-
-		dma_buffer_close(&nic);
 	}else{
+		fprintf(stderr, "command %s not support!\n", argv[1]);
 		goto out_mlock;	//deprecated
-
-		/* The first io resource is the base addresse to
-		* access the NIC registers */
-		nic.base_addr = nic.bar[0].mmapaddr;
-
-		r = dma_buffer_open(&nic);			//参考： https://stackoverflow.com/a/7021125
-		if (r < 0) {
-			fprintf(stderr, "dma_buffer_open failed\n");
-			goto out_mlock;
-		}
-
-		fprintf(stderr, "1\n");
-		rtl8139_init(&nic);
-		rtl8139_print_mac_addr(&nic);
-
-		nic.fd = open(nic.uio_device_name, O_RDWR);
-		handle_interrupt(nic.fd, &nic);
-		close(nic.fd);
-
-		dma_buffer_close(&nic);
 	}
 
 out_mlock:
