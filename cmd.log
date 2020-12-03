@@ -2,9 +2,11 @@ cmd.log
 
 service bumblebeed stop
 cd /home/olay/cnmdp/pcie/uio-rtl8139
+cd /home/pegga/cnmdp/uio-rtl8139/
 
 modprobe uio
 insmod /home/olay/cnmdp/pcie/uio-rtl8139/kmod/uio_rtl8139.ko
+insmod kmod/uio_rtl8139.ko
 ./user/rtl8139_user r 0 0
 
 

@@ -611,6 +611,9 @@ int main(int argc, char *argv[])
 {
 	if (argc < 4){
         fprintf (stderr, "error: %s need 5 args, current=%d\n", argv[0], argc);
+        fprintf (stderr, "read:  %s r <bar> <addr>\n", argv[0]);
+        fprintf (stderr, "write: %s w <bar> <addr> <value>\n", argv[0]);
+        fprintf (stderr, "dump:  %s d <bar> <addr> <num>\n", argv[0]);
 		return -1;
     }
 
@@ -699,7 +702,7 @@ int main(int argc, char *argv[])
 		}
 		for (i=0; i<cmd_scope; ++i){
 			cmd_value = ioread32(nic.bar[cmd_bar].mmapaddr+cmd_offset);
-        	printf("A=0x%08lx  V=0x%08lx\n", cmd_bar, cmd_offset, cmd_value); 
+        	printf("A=0x%08lx  V=0x%08lx\n", cmd_offset, cmd_value); 
 			cmd_offset += 4;
 		}
 	}else{
