@@ -692,7 +692,7 @@ int main(int argc, char *argv[])
     }else if(argv[1][0] == 'd' || argv[1][0] == 'D'){	//dump
 		int cmd_bar = strtol(argv[2], NULL, 10);
 		int cmd_offset = strtol(argv[3], NULL, 16);
-		int cmd_scope = strtol(argv[4], NULL, 16);
+		int cmd_scope = strtol(argv[4], NULL, 10);
 		int cmd_value;
 		int i;
         printf("read bar=%d  begin offset=0x%08lx num=%d:\n", cmd_bar, cmd_offset, cmd_scope); 
